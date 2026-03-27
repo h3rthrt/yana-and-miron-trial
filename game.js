@@ -762,7 +762,7 @@ class Game {
 
     ctx.fillStyle = "#c026d3";
     ctx.font = "bold 30px Nunito, sans-serif";
-    ctx.fillText("Сквозь преграды", CONFIG.WIDTH / 2, 190);
+    ctx.fillText("Сквозь подарки", CONFIG.WIDTH / 2, 190);
 
     // Subtitle
     ctx.fillStyle = "#9333ea";
