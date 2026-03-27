@@ -54,17 +54,23 @@ const CONFIG = {
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-canvas.width = CONFIG.WIDTH;
-canvas.height = CONFIG.HEIGHT;
-
 function resizeCanvas() {
-  const scaleX = window.innerWidth / CONFIG.WIDTH;
-  const scaleY = window.innerHeight / CONFIG.HEIGHT;
-  const scale = Math.min(scaleX, scaleY);
-  canvas.style.width = `${CONFIG.WIDTH * scale}px`;
-  canvas.style.height = `${CONFIG.HEIGHT * scale}px`;
+  const dpr = window.devicePixelRatio || 1;
+  const w   = window.innerWidth;
+  const h   = window.innerHeight;
+
+  canvas.width  = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+
+  CONFIG.WIDTH  = w;
+  CONFIG.HEIGHT = h;
+
+  // Scale all draw calls to logical pixels
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
-window.addEventListener("resize", resizeCanvas);
+
 resizeCanvas();
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -924,10 +930,14 @@ class Game {
   // ─── MAIN LOOP ──────────────────────────────────────────────────────────
 
   start() {
-    const loop = () => {
+    const FRAME_MS = 1000 / 60; // target 60 fps
+    let lastTs = 0;
+    const loop = (ts) => {
+      requestAnimationFrame(loop);
+      if (ts - lastTs < FRAME_MS - 1) return; // skip on 90/120 Hz screens
+      lastTs = ts;
       this._update();
       this._draw();
-      requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
   }
