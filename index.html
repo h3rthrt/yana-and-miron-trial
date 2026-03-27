@@ -17,6 +17,25 @@
   </head>
   <body>
     <canvas id="gameCanvas"></canvas>
+
+    <div id="name-screen">
+      <div class="name-card">
+        <div class="name-emoji">🎂</div>
+        <div class="name-title">Яна и Мирон</div>
+        <div class="name-subtitle">Введите имя, чтобы сохранить счёт</div>
+        <input
+          type="text"
+          id="player-name"
+          placeholder="Ваше имя..."
+          maxlength="16"
+          autocomplete="off"
+          autocorrect="off"
+          spellcheck="false"
+        />
+        <button id="start-btn">Играть! 🎮</button>
+      </div>
+    </div>
+
     <script src="game.js"></script>
   </body>
 </html>

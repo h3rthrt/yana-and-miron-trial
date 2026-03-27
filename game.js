@@ -49,6 +49,55 @@ const CONFIG = {
   },
 };
 
+// ─── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+// 1. Зайдите на https://supabase.com и создайте бесплатный проект
+// 2. В Table Editor создайте таблицу "scores" с колонками:
+//    name (text), yana (int4), miron (int4), total (int4)
+// 3. В Authentication → Policies отключите RLS для таблицы scores
+//    (или добавьте политику allow all для anon)
+// 4. В Settings → API скопируйте Project URL и anon public key
+
+const SUPABASE_URL = "https://ihmkqcgbqvjdcnrpqpqs.supabase.co";
+const SUPABASE_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlobWtxY2dicXZqZGNucnBxcHFzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2MjUwODYsImV4cCI6MjA5MDIwMTA4Nn0.sIXELBGS1MVzU5_uwQt9Ldi6njclW49jwYSLDKa72PM";
+const DB_READY = !SUPABASE_URL.includes("ВАSH_");
+
+async function saveScore(name, yana, miron) {
+  if (!DB_READY) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=minimal",
+      },
+      body: JSON.stringify({ name, yana, miron, total: yana + miron }),
+    });
+  } catch (_) {
+    /* offline — ignore */
+  }
+}
+
+async function getTopScores(limit = 7) {
+  if (!DB_READY) return [];
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/scores?select=name,yana,miron,total&order=total.desc&limit=${limit}`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      },
+    );
+    return res.ok ? await res.json() : [];
+  } catch (_) {
+    return [];
+  }
+}
+
 // ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
 
 const canvas = document.getElementById("gameCanvas");
@@ -56,15 +105,15 @@ const ctx = canvas.getContext("2d");
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  const w   = window.innerWidth;
-  const h   = window.innerHeight;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
 
-  canvas.width  = Math.round(w * dpr);
+  canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
-  canvas.style.width  = w + 'px';
-  canvas.style.height = h + 'px';
+  canvas.style.width = w + "px";
+  canvas.style.height = h + "px";
 
-  CONFIG.WIDTH  = w;
+  CONFIG.WIDTH = w;
   CONFIG.HEIGHT = h;
 
   // Scale all draw calls to logical pixels
@@ -441,6 +490,9 @@ class Game {
       pipeTimer: 0,
       wingAngle: 0,
       wingDir: 1,
+      playerName: "Гость",
+      leaderboard: [],
+      leaderboardLoaded: false,
     };
 
     // Restart button rect (updated each frame in _drawGameOver)
@@ -533,6 +585,17 @@ class Game {
 
   _gameOver() {
     this.state.phase = "gameover";
+    this.state.leaderboard = [];
+    this.state.leaderboardLoaded = false;
+
+    const { yana, miron } = this.state.scores;
+    const name = this.state.playerName;
+    saveScore(name, yana, miron)
+      .then(() => getTopScores())
+      .then((rows) => {
+        this.state.leaderboard = rows;
+        this.state.leaderboardLoaded = true;
+      });
   }
 
   // ─── CHARACTER SWITCH ───────────────────────────────────────────────────
@@ -845,86 +908,256 @@ class Game {
   _drawGameOver() {
     this._drawBackground();
 
-    // Dim overlay
-    ctx.fillStyle = "rgba(45, 27, 78, 0.55)";
+    ctx.fillStyle = "rgba(45, 27, 78, 0.72)";
     ctx.fillRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
-    // Panel
-    const pw = 340,
-      ph = 340;
+    // ── Layout constants ──────────────────────────────────────
+    const GAP = 16; // base spacing unit
+    const pad = 20; // horizontal inner padding
+    const ROW_H = 32; // leaderboard row height
+
+    const pw = Math.min(360, CONFIG.WIDTH - GAP * 2);
     const px = (CONFIG.WIDTH - pw) / 2;
-    const py = (CONFIG.HEIGHT - ph) / 2 - 20;
+    const cx = CONFIG.WIDTH / 2;
+    const total = this.state.scores.yana + this.state.scores.miron;
 
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    roundRect(px, py, pw, ph, 28);
+    // ── Estimate total content height ────────────────────────
+    const lbRows = this.state.leaderboardLoaded
+      ? Math.min(this.state.leaderboard.length, 7)
+      : 0;
+    const lbBlock =
+      this.state.leaderboardLoaded && lbRows > 0
+        ? GAP + 16 + GAP * 0.5 + lbRows * ROW_H + GAP // header + rows
+        : GAP + 32 + GAP; // loading / empty
+
+    const contentH =
+      GAP * 2 + // top padding
+      28 + // title
+      GAP + // ↕
+      16 + // player name
+      GAP + // ↕
+      68 + // score cards
+      GAP + // ↕
+      24 + // total
+      GAP * 0.75 + // ↕
+      15 + // msg
+      GAP * 1.5 + // ↕ + divider
+      18 + // "Топ игроков"
+      lbBlock + // leaderboard block
+      GAP + // ↕ + divider
+      50 + // button
+      GAP * 1.5; // bottom padding
+
+    const ph = Math.min(contentH, CONFIG.HEIGHT - GAP * 2);
+    const py = (CONFIG.HEIGHT - ph) / 2;
+
+    // ── Panel ─────────────────────────────────────────────────
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    roundRect(px, py, pw, ph, 24);
     ctx.fill();
-
     ctx.shadowColor = "#c084fc";
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 16;
     ctx.strokeStyle = "#c084fc";
-    ctx.lineWidth = 3;
-    roundRect(px, py, pw, ph, 28);
+    ctx.lineWidth = 2;
+    roundRect(px, py, pw, ph, 24);
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // Title
+    // ── Helper: thin full-width divider ──────────────────────
+    const divider = (yy) => {
+      ctx.fillStyle = "#ede9fe";
+      ctx.fillRect(px + pad, yy, pw - pad * 2, 1.5);
+    };
+
+    let y = py + GAP * 2;
     ctx.textAlign = "center";
+
+    // ── Title ─────────────────────────────────────────────────
     ctx.fillStyle = "#7c3aed";
-    ctx.font = "bold 34px Nunito, sans-serif";
-    ctx.fillText("Игра окончена!", CONFIG.WIDTH / 2, py + 54);
-
-    // Scores
-    const sy = py + 100;
-    ctx.font = "bold 22px Nunito, sans-serif";
-    ctx.fillStyle = CONFIG.COLORS.yana.beak;
-    ctx.fillText(`Яна:  ${this.state.scores.yana}`, CONFIG.WIDTH / 2, sy);
-    ctx.fillStyle = CONFIG.COLORS.miron.beak;
-    ctx.fillText(
-      `Мирон: ${this.state.scores.miron}`,
-      CONFIG.WIDTH / 2,
-      sy + 44,
-    );
-
-    // Divider
-    ctx.fillStyle = "#e9d5ff";
-    ctx.fillRect(px + 30, sy + 64, pw - 60, 2);
-
-    // Total
-    const total = this.state.scores.yana + this.state.scores.miron;
-    ctx.fillStyle = "#3d1f2d";
     ctx.font = "bold 26px Nunito, sans-serif";
-    ctx.fillText(`Итого: ${total} `, CONFIG.WIDTH / 2, sy + 96);
+    ctx.fillText("Игра окончена!", cx, y);
+    y += 26 + GAP;
 
-    // Celebration message
-    ctx.font = "17px Nunito, sans-serif";
+    // ── Player name ───────────────────────────────────────────
+    ctx.font = "15px Nunito, sans-serif";
+    ctx.fillStyle = "#a78bfa";
+    ctx.fillText(`👤  ${this.state.playerName}`, cx, y);
+    y += 15 + GAP;
+
+    // ── Score cards (two symmetric cards) ────────────────────
+    const cardGap = 10;
+    const cardW = (pw - pad * 2 - cardGap) / 2;
+    const cardH = 68;
+    const cardY = y;
+
+    // Yana card
+    const yanaCx = px + pad + cardW / 2;
+    ctx.fillStyle = "rgba(244,167,185,0.18)";
+    roundRect(px + pad, cardY, cardW, cardH, 14);
+    ctx.fill();
+    ctx.strokeStyle = CONFIG.COLORS.yana.body;
+    ctx.lineWidth = 2;
+    roundRect(px + pad, cardY, cardW, cardH, 14);
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.font = "13px Nunito, sans-serif";
+    ctx.fillStyle = CONFIG.COLORS.yana.beak;
+    ctx.fillText("Яна", yanaCx, cardY + 22);
+    ctx.font = "bold 26px Nunito, sans-serif";
+    ctx.fillText(this.state.scores.yana, yanaCx, cardY + 52);
+
+    // Miron card
+    const mironCx = px + pad + cardW + cardGap + cardW / 2;
+    ctx.fillStyle = "rgba(168,216,234,0.18)";
+    roundRect(px + pad + cardW + cardGap, cardY, cardW, cardH, 14);
+    ctx.fill();
+    ctx.strokeStyle = CONFIG.COLORS.miron.body;
+    ctx.lineWidth = 2;
+    roundRect(px + pad + cardW + cardGap, cardY, cardW, cardH, 14);
+    ctx.stroke();
+    ctx.font = "13px Nunito, sans-serif";
+    ctx.fillStyle = CONFIG.COLORS.miron.beak;
+    ctx.fillText("Мирон", mironCx, cardY + 22);
+    ctx.font = "bold 26px Nunito, sans-serif";
+    ctx.fillText(this.state.scores.miron, mironCx, cardY + 52);
+
+    y += cardH + GAP + 15;
+
+    // ── Total ─────────────────────────────────────────────────
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#3d1f2d";
+    ctx.font = "bold 22px Nunito, sans-serif";
+    ctx.fillText(`Итого: ${total}`, cx, y);
+    y += 12 + GAP * 0.75;
+
+    // ── Celebration msg ───────────────────────────────────────
+    ctx.font = "14px Nunito, sans-serif";
     ctx.fillStyle = "#9333ea";
     const msg =
-      total >= 10
-        ? "Невероятно! Вы настоящие чемпионы! 🏆"
-        : "Попробуйте ещё раз! 🎈";
-    ctx.fillText(msg, CONFIG.WIDTH / 2, sy + 132);
+      total >= 20
+        ? "Невероятно! Настоящие чемпионы! 🏆"
+        : total >= 10
+          ? "Отлично! Поздравляем! 🎊"
+          : "Попробуйте ещё раз! 🎈";
+    ctx.fillText(msg, cx, y);
+    y += 15 + GAP * 1.5;
 
-    // Restart button
-    const bw = 200,
-      bh = 52;
+    divider(y - GAP * 0.75);
+
+    // ── Leaderboard header ────────────────────────────────────
+    ctx.fillStyle = "#7c3aed";
+    ctx.font = "bold 16px Nunito, sans-serif";
+    ctx.fillText("🏆 Топ игроков", cx, y + 12);
+    y += 16 + GAP;
+
+    // ── Column X positions (consistent for header + rows) ────
+    const COL_MEDAL = px + pad; // left: rank/medal
+    const COL_NAME = px + pad + 36; // name starts here
+    const COL_SCORE = px + pw - pad; // score right-aligned here
+    const NAME_MAX_W = COL_SCORE - COL_NAME - 12;
+
+    if (!DB_READY) {
+      ctx.fillStyle = "#c4b5fd";
+      ctx.font = "13px Nunito, sans-serif";
+      ctx.fillText("(настройте Supabase для сохранения)", cx, y + 14);
+      y += 32 + GAP;
+    } else if (!this.state.leaderboardLoaded) {
+      ctx.fillStyle = "#9333ea";
+      ctx.font = "15px Nunito, sans-serif";
+      const dots = ".".repeat(1 + (Math.floor(this.state.frame / 18) % 3));
+      ctx.fillText(`Загрузка${dots}`, cx, y + 14);
+      y += 32 + GAP;
+    } else if (this.state.leaderboard.length === 0) {
+      ctx.fillStyle = "#c4b5fd";
+      ctx.font = "15px Nunito, sans-serif";
+      ctx.fillText("Нет записей", cx, y + 14);
+      y += 32 + GAP;
+    } else {
+      // Column headers
+      ctx.font = "bold 11px Nunito, sans-serif";
+      ctx.fillStyle = "#a78bfa";
+      ctx.textAlign = "left";
+      ctx.fillText("№", COL_MEDAL, y);
+      ctx.fillText("Игрок", COL_NAME, y);
+      ctx.textAlign = "right";
+      ctx.fillText("Очки", COL_SCORE, y);
+      y += GAP * 0.5;
+      divider(y);
+      y += GAP * 0.5 + 8;
+
+      const rows = Math.min(this.state.leaderboard.length, 7);
+      for (let i = 0; i < rows; i++) {
+        const e = this.state.leaderboard[i];
+        const isMe = e.name === this.state.playerName;
+
+        // Row highlight
+        if (isMe) {
+          ctx.fillStyle = "rgba(196,181,253,0.28)";
+          roundRect(
+            px + pad - 4,
+            y - ROW_H * 0.72,
+            pw - pad * 2 + 8,
+            ROW_H,
+            10,
+          );
+          ctx.fill();
+        }
+
+        const color =
+          i === 0
+            ? "#f59e0b"
+            : i === 1
+              ? "#94a3b8"
+              : i === 2
+                ? "#b45309"
+                : isMe
+                  ? "#7c3aed"
+                  : "#3d1f2d";
+
+        ctx.font = isMe
+          ? "bold 14px Nunito, sans-serif"
+          : "14px Nunito, sans-serif";
+        ctx.fillStyle = color;
+
+        // Medal / rank
+        const medal =
+          i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+        ctx.textAlign = "left";
+        ctx.fillText(medal, COL_MEDAL, y);
+
+        // Name (truncated)
+        let nm = e.name;
+        while (ctx.measureText(nm).width > NAME_MAX_W && nm.length > 1)
+          nm = nm.slice(0, -1);
+        if (nm !== e.name) nm += "…";
+        ctx.fillText(nm, COL_NAME, y);
+
+        // Score
+        ctx.textAlign = "right";
+        ctx.fillStyle = isMe ? "#7c3aed" : color;
+        ctx.fillText(e.total, COL_SCORE, y);
+
+        y += ROW_H;
+      }
+      y += GAP * 0.5;
+    }
+
+    // ── Bottom divider + button ───────────────────────────────
+    divider(y);
+    y += GAP;
+
+    const bw = Math.min(220, pw - pad * 2);
+    const bh = 50;
     const bx = (CONFIG.WIDTH - bw) / 2;
-    const by = py + ph - 74;
-    this._restartBtn = { x: bx, y: by, w: bw, h: bh };
-
-    const pulse = 0.88 + 0.12 * Math.sin(this.state.frame * 0.1);
-    ctx.save();
-    ctx.scale(1, pulse);
-    const scaledBy = by / pulse;
+    this._restartBtn = { x: bx, y, w: bw, h: bh };
 
     ctx.fillStyle = "#7c3aed";
-    roundRect(bx, scaledBy, bw, bh, 26);
+    roundRect(bx, y, bw, bh, 25);
     ctx.fill();
-
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 22px Nunito, sans-serif";
+    ctx.font = "bold 20px Nunito, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Ещё раз!", CONFIG.WIDTH / 2, scaledBy + bh / 2 + 8);
-    ctx.restore();
+    ctx.fillText("Ещё раз! 🎮", cx, y + bh / 2 + 7);
   }
 
   // ─── MAIN LOOP ──────────────────────────────────────────────────────────
@@ -950,11 +1183,33 @@ document.fonts.ready.then(() => {
   const mironImg = new Image();
   let loaded = 0;
   const onLoad = () => {
-    if (++loaded === 2) new Game(yanaImg, mironImg).start();
+    if (++loaded < 2) return;
+
+    const game = new Game(yanaImg, mironImg);
+    const nameScreen = document.getElementById("name-screen");
+    const nameInput = document.getElementById("player-name");
+    const startBtn = document.getElementById("start-btn");
+
+    game.start(); // runs title animation behind the overlay
+
+    const beginGame = () => {
+      const name = nameInput.value.trim() || "Гость";
+      game.state.playerName = name;
+      nameScreen.style.display = "none";
+      // game stays in 'title' phase — tap/click on canvas starts playing
+    };
+
+    startBtn.addEventListener("click", beginGame);
+    nameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") beginGame();
+    });
+    // Auto-focus the input on desktop
+    nameInput.focus();
   };
+
   yanaImg.onload = onLoad;
   mironImg.onload = onLoad;
-  yanaImg.onerror = onLoad; // start anyway if image fails
+  yanaImg.onerror = onLoad;
   mironImg.onerror = onLoad;
   yanaImg.src = "yana.webp";
   mironImg.src = "miron.webp";

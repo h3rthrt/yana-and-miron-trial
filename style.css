@@ -14,3 +14,89 @@ canvas {
   display: block;
   cursor: pointer;
 }
+
+/* ── Name screen overlay ──────────────────────────────────── */
+
+#name-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(45, 27, 78, 0.88);
+  z-index: 10;
+  font-family: 'Nunito', sans-serif;
+  padding: 16px;
+}
+
+.name-card {
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 28px;
+  padding: 36px 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: 0 8px 48px rgba(124, 58, 237, 0.4);
+}
+
+.name-emoji {
+  font-size: 52px;
+  line-height: 1;
+}
+
+.name-title {
+  font-size: 26px;
+  font-weight: 900;
+  color: #7c3aed;
+  text-align: center;
+}
+
+.name-subtitle {
+  font-size: 15px;
+  color: #9333ea;
+  text-align: center;
+  margin-top: -4px;
+}
+
+#player-name {
+  width: 100%;
+  padding: 14px 20px;
+  border: 2.5px solid #c084fc;
+  border-radius: 50px;
+  font-size: 18px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  color: #3d1f2d;
+  background: #fdf4ff;
+  transition: border-color 0.15s;
+}
+
+#player-name:focus {
+  border-color: #7c3aed;
+}
+
+#start-btn {
+  width: 100%;
+  padding: 15px;
+  background: linear-gradient(135deg, #7c3aed, #c026d3);
+  color: #fff;
+  border: none;
+  border-radius: 50px;
+  font-size: 20px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: transform 0.1s, opacity 0.1s;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#start-btn:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+}
