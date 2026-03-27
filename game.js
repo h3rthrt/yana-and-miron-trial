@@ -1157,7 +1157,7 @@ class Game {
     ctx.fillStyle = "#fff";
     ctx.font = "bold 20px Nunito, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Ещё раз! 🎮", cx, y + bh / 2 + 7);
+    ctx.fillText("Ещё раз!", cx, y + bh / 2 + 7);
   }
 
   // ─── MAIN LOOP ──────────────────────────────────────────────────────────
